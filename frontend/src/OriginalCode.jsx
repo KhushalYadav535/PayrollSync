@@ -39,7 +39,7 @@ export default function UploadPage() {
     const formData = new FormData();
     formData.append("file", file);
 
-    await fetch("http://localhost:8000/upload", {
+    await fetch("https://payrollsync.onrender.com/upload", {
       method: "POST",
       body: formData,
     });

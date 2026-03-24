@@ -44,7 +44,7 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("http://localhost:8000/upload", {
+      const response = await fetch("https://payrollsync.onrender.com/upload", {
         method: "POST",
         body: formData,
       });
@@ -70,7 +70,7 @@ export default function UploadPage() {
         setProgress(100);
         
         try {
-          const downloadResponse = await fetch("http://localhost:8000/downloads");
+          const downloadResponse = await fetch("https://payrollsync.onrender.com/downloads");
           const downloads = await downloadResponse.json();
           setDownloadLinks(downloads.files);
           setSuccess(`Successfully processed ${file.name}. Generated ${downloads.files.length} ECR files.`);
@@ -90,7 +90,7 @@ export default function UploadPage() {
   };
 
   const downloadFile = (filename) => {
-    window.open(`http://localhost:8000/download/${filename}`, '_blank');
+    window.open(`https://payrollsync.onrender.com/download/${filename}`, '_blank');
   };
 
   const getFileIcon = (type) => {
