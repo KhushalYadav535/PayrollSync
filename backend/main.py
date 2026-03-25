@@ -52,24 +52,36 @@ class FileInfo(BaseModel):
 class DownloadResponse(BaseModel):
     files: List[FileInfo]
 
-def validate_uan(uan: str) -> bool:
-    """Validate UAN format"""
-    if pd.isna(uan):
-        return False
-    uan_str = str(uan).split('.')[0].strip()
-    return bool(EPFO_CONFIG["uan_pattern"].match(uan_str))
+def clean_uan(uan) -> str:
+    if pd.isna(uan): return ""
+    u = str(uan).strip()
+    if 'e' in u.lower() or 'E' in u:
+        try:
+            u = str(int(float(u)))
+        except:
+            pass
+    if u.endswith('.0'):
+        u = u[:-2]
+    u = u.replace(" ", "").replace("-", "")
+    return u
 
-def validate_basic_pay(basic_pay: float) -> bool:
-    """Validate basic pay amount"""
-    if pd.isna(basic_pay):
-        return False
-    return (EPFO_CONFIG["min_basic_wage"] <= basic_pay <= EPFO_CONFIG["max_basic_wage"])
+def clean_name(name) -> str:
+    if pd.isna(name): return ""
+    n = str(name).upper().strip()
+    # Remove all special characters (retain A-Z, 0-9, space)
+    n = re.sub(r'[^A-Z0-9\s]', ' ', n)
+    # Collapse multiple spaces
+    n = re.sub(r'\s+', ' ', n).strip()
+    return n
 
-def clean_member_name(name: str) -> str:
-    """Clean and format member name"""
-    if pd.isna(name):
-        return ""
-    return str(name).strip().upper()
+def validate_row_data(uan, name, basic_pay):
+    if not uan or not name or pd.isna(basic_pay):
+        return False
+    if basic_pay <= 0:
+        return False
+    if len(name) < 3 or name in ["NAM", "NAME", "EMP"]:
+        return False
+    return True
 
 def calculate_pf_contributions(basic_pay: float) -> Dict[str, float]:
     """Calculate PF and EPS contributions"""
@@ -85,8 +97,35 @@ def calculate_pf_contributions(basic_pay: float) -> Dict[str, float]:
         "er_share": er_share
     }
 
+def find_header_row(df_raw: pd.DataFrame) -> int:
+    keywords = ["uan", "pf", "name", "employee", "basic", "wages", "salary"]
+    best_row_idx = 0
+    max_matches = 0
+    # Search the first 50 rows
+    for idx, row in df_raw.head(50).iterrows():
+        matches = sum(1 for cell in row if pd.notna(cell) and any(kw in str(cell).lower() for kw in keywords))
+        if matches > max_matches:
+            max_matches = matches
+            best_row_idx = idx
+        if max_matches >= 3:
+            return best_row_idx
+    return best_row_idx
+
+def get_name_col_by_length(df: pd.DataFrame) -> str:
+    best_col = None
+    best_len = 0
+    for col in df.columns:
+        if df[col].dtype == object or str(df[col].dtype) in ['string', 'string[python]']:
+            sample = df[col].dropna().astype(str).head(20)
+            if not sample.empty:
+                avg = sample.apply(len).mean()
+                if avg > best_len:
+                    best_len = avg
+                    best_col = col
+    return best_col
+
 def process_excel_file(file_path: str) -> ProcessingResult:
-    """Process Excel file and generate ECR files"""
+    """Process Excel file and generate ECR files according to EPFO rules"""
     errors = []
     files_generated = []
     
@@ -98,58 +137,80 @@ def process_excel_file(file_path: str) -> ProcessingResult:
         
         for sheet_name in xls.sheet_names:
             try:
-                df = xls.parse(sheet_name)
-                df.columns = [str(c).lower() for c in df.columns]
-                
-                # Find required columns
-                def find_column(keys: List[str]) -> str:
-                    for col in df.columns:
-                        for k in keys:
-                            if k in col:
-                                return col
-                    return None
-                
-                uan_col = find_column(["uan", "pf", "uan no", "pf no"])
-                name_col = find_column(["name", "employee", "member"])
-                basic_col = find_column(["basic", "basic pay", "basic salary"])
-                
-                if not (uan_col and name_col and basic_col):
-                    errors.append(f"Sheet '{sheet_name}': Missing required columns (UAN, Name, Basic Pay)")
+                # Read without header to find the header row dynamically
+                df_raw = xls.parse(sheet_name, header=None)
+                if df_raw.empty:
                     continue
                 
-                # Process data
+                header_idx = find_header_row(df_raw)
+                
+                # Parse with correct header
+                df = xls.parse(sheet_name, header=header_idx)
+                
+                cols = [str(c).lower().strip() for c in df.columns]
+                
+                # UAN Column Mapping
+                uan_col = None
+                for kw in ["uan", "pf", "pf no"]:
+                    for idx, c in enumerate(cols):
+                        if kw == c or (kw in c and "amount" not in c and "share" not in c):
+                            if uan_col is None: uan_col = df.columns[idx]
+                
+                # Name Column Mapping
+                name_col = None
+                for kw in ["name of the employee", "employee name", "member name", "name"]:
+                    for idx, c in enumerate(cols):
+                        if kw == c or kw in c.split():
+                            if name_col is None: name_col = df.columns[idx]
+                            
+                # Basic Column Mapping
+                basic_col = None
+                for kw in ["basic", "wages", "salary"]:
+                    for idx, c in enumerate(cols):
+                        if kw == c or kw in c:
+                            if basic_col is None: basic_col = df.columns[idx]
+                
+                if not (uan_col and name_col and basic_col):
+                    errors.append(f"Sheet '{sheet_name}': Missing required columns (UAN, Name, Basic)")
+                    continue
+                
+                # Validate name column
+                sample_names = df[name_col].dropna().astype(str).head(10)
+                avg_len = sample_names.apply(len).mean() if not sample_names.empty else 0
+                if avg_len < 4 or sample_names.isin(["NAM", "EMP", "NAME"]).any():
+                    alt_name_col = get_name_col_by_length(df)
+                    if alt_name_col:
+                        name_col = alt_name_col
+                
                 sheet_data = []
                 for idx, row in df.iterrows():
-                    uan = row[uan_col]
-                    name = row[name_col]
-                    basic_pay = pd.to_numeric(row[basic_col], errors="coerce")
+                    raw_basic = row[basic_col]
+                    raw_name = row[name_col]
                     
-                    # Validation
-                    if not validate_uan(uan):
-                        errors.append(f"Sheet '{sheet_name}', Row {idx+2}: Invalid UAN format - {uan}")
+                    if str(raw_basic).lower() in ["total", "grand total", "sum"]:
+                        continue
+                    if pd.notna(raw_name) and str(raw_name).lower() in ["total", "grand total"]:
+                        continue
+                        
+                    basic_pay = pd.to_numeric(raw_basic, errors="coerce")
+                    uan = clean_uan(row[uan_col])
+                    name = clean_name(raw_name)
+                    
+                    if not validate_row_data(uan, name, basic_pay):
                         continue
                     
-                    if not validate_basic_pay(basic_pay):
-                        errors.append(f"Sheet '{sheet_name}', Row {idx+2}: Invalid basic pay - {basic_pay}")
-                        continue
-                    
-                    if basic_pay <= 0:
-                        continue  # Skip zero or negative basic pay
-                    
-                    # Calculate contributions
                     contributions = calculate_pf_contributions(basic_pay)
                     
-                    # Create row data
                     row_data = {
-                        "UAN": str(uan).split('.')[0],
-                        "Member Name": clean_member_name(name),
-                        "Gross Wages": int(basic_pay),
-                        "EPF Wages": int(contributions["pf_salary"]),
-                        "EPS Wages": int(contributions["pf_salary"]),
-                        "EDLI Wages": int(contributions["pf_salary"]),
-                        "EE Share": contributions["epf"],
-                        "EPS Contribution": contributions["eps_contribution"],
-                        "ER Share": contributions["er_share"],
+                        "UAN": uan,
+                        "Member Name": name,
+                        "Gross Wages": int(round(basic_pay)),
+                        "EPF Wages": int(round(contributions["pf_salary"])),
+                        "EPS Wages": int(round(contributions["pf_salary"])),
+                        "EDLI Wages": int(round(contributions["pf_salary"])),
+                        "EE Share": int(round(contributions["epf"])),
+                        "EPS Contribution": int(round(contributions["eps_contribution"])),
+                        "ER Share": int(round(contributions["er_share"])),
                         "NCP Days": 0,
                         "Refund": 0,
                         "Month": sheet_name
@@ -175,16 +236,28 @@ def process_excel_file(file_path: str) -> ProcessingResult:
                 errors=errors
             )
         
-        # Create DataFrame
         df_all = pd.DataFrame(all_data)
         
-        # Generate output files
+        # Output Generation
         ecr_columns = [
             "UAN", "Member Name", "Gross Wages", "EPF Wages", "EPS Wages",
             "EDLI Wages", "EE Share", "EPS Contribution", "ER Share", "NCP Days", "Refund"
         ]
         
-        # Group by month and generate files
+        # 1. Consolidated ECR dataset
+        consolidated_filename = "Consolidated_ECR.xlsx"
+        consolidated_path = os.path.join(OUTPUT_DIR, consolidated_filename)
+        df_all[ecr_columns + ["Month"]].to_excel(consolidated_path, index=False)
+        files_generated.append(consolidated_filename)
+        
+        # 2. Month-wise ECR Excel
+        monthwise_filename = "Month_wise_ECR.xlsx"
+        monthwise_path = os.path.join(OUTPUT_DIR, monthwise_filename)
+        with pd.ExcelWriter(monthwise_path) as writer:
+            for month, group in df_all.groupby("Month"):
+                group[ecr_columns].to_excel(writer, sheet_name=str(month), index=False)
+        files_generated.append(monthwise_filename)
+        
         summary_data = []
         for month, group in df_all.groupby("Month"):
             # CSV file
@@ -193,7 +266,7 @@ def process_excel_file(file_path: str) -> ProcessingResult:
             group[ecr_columns].to_csv(csv_path, index=False)
             files_generated.append(csv_filename)
             
-            # Text file for EPFO portal
+            # TXT file (No header, #~# separated)
             txt_filename = f"ECR_{month}.txt"
             txt_path = os.path.join(OUTPUT_DIR, txt_filename)
             with open(txt_path, "w") as f:
@@ -205,14 +278,12 @@ def process_excel_file(file_path: str) -> ProcessingResult:
             # Summary data
             month_summary = {
                 "Month": month,
-                "Employee Count": len(group),
-                "Gross Wages Total": group["Gross Wages"].sum(),
-                "EE Share Total": group["EE Share"].sum(),
-                "ER Share Total": group["ER Share"].sum()
+                "Total Basic Pay": group["Gross Wages"].sum(),
+                "Total EPF (EE Share)": group["EE Share"].sum()
             }
             summary_data.append(month_summary)
         
-        # Generate summary Excel
+        # Summary Excel
         summary_df = pd.DataFrame(summary_data)
         summary_filename = "Summary.xlsx"
         summary_path = os.path.join(OUTPUT_DIR, summary_filename)
