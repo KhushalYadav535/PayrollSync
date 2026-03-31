@@ -129,6 +129,15 @@ def process_excel_file(file_path: str) -> ProcessingResult:
     errors = []
     files_generated = []
     
+    # Clean old output files before processing new upload
+    for old_file in os.listdir(OUTPUT_DIR):
+        old_path = os.path.join(OUTPUT_DIR, old_file)
+        if os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except Exception as e:
+                logger.warning(f"Could not remove old file {old_file}: {e}")
+    
     try:
         xls = pd.ExcelFile(file_path)
         all_data = []

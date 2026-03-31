@@ -44,17 +44,6 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("https://payrollsync.onrender.com/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-
-      await response.json();
-      
       setProcessing(true);
       setProgress(25);
 
@@ -65,22 +54,40 @@ export default function UploadPage() {
         });
       }, 400);
 
-      setTimeout(async () => {
-        clearInterval(progressInterval);
-        setProgress(100);
-        
-        try {
-          const downloadResponse = await fetch("https://payrollsync.onrender.com/downloads");
-          const downloads = await downloadResponse.json();
-          setDownloadLinks(downloads.files);
-          setSuccess(`Successfully processed ${file.name}. Generated ${downloads.files.length} ECR files.`);
-        } catch (err) {
-          setError("Failed to fetch download links");
-        } finally {
-          setProcessing(false);
-          setUploading(false);
+      const response = await fetch("https://payrollsync.onrender.com/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      setProgress(100);
+
+      if (result.success) {
+        // Use files_generated from the upload response directly
+        // This ensures we only show files from THIS upload, not old leftovers
+        const generatedFiles = result.files_generated.map(filename => {
+          let type = "Excel";
+          if (filename.endsWith('.csv')) type = "CSV";
+          else if (filename.endsWith('.txt')) type = "TEXT";
+          return { filename, type };
+        });
+        setDownloadLinks(generatedFiles);
+        setSuccess(result.message);
+      } else {
+        setError(result.message || "Processing failed");
+        if (result.errors && result.errors.length > 0) {
+          setError(result.errors.join(", "));
         }
-      }, 2000);
+      }
+
+      setProcessing(false);
+      setUploading(false);
 
     } catch (err) {
       setError(err.message);
