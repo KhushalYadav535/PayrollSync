@@ -20,20 +20,23 @@ function getFileConfig(filename) {
 }
 
 function SummaryCard({ icon, label, value, color }) {
-  const colors = {
-    indigo: "from-indigo-500 to-indigo-600 shadow-indigo-500/30",
-    emerald: "from-emerald-500 to-emerald-600 shadow-emerald-500/30",
-    violet: "from-violet-500 to-violet-600 shadow-violet-500/30",
-    amber: "from-amber-500 to-amber-600 shadow-amber-500/30",
+  const accents = {
+    indigo:  { bar: "bg-indigo-500",  icon: "bg-indigo-50 text-indigo-600",  val: "text-indigo-700" },
+    emerald: { bar: "bg-emerald-500", icon: "bg-emerald-50 text-emerald-600", val: "text-emerald-700" },
+    violet:  { bar: "bg-violet-500",  icon: "bg-violet-50 text-violet-600",   val: "text-violet-700" },
+    amber:   { bar: "bg-amber-500",   icon: "bg-amber-50 text-amber-600",     val: "text-amber-700" },
   };
+  const a = accents[color] || accents.indigo;
   return (
-    <div className="bg-white/80 rounded-2xl p-5 border border-white/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06)] flex items-center gap-4">
-      <div className={`p-3 rounded-2xl bg-gradient-to-br ${colors[color]} shadow-lg text-white shrink-0`}>
+    <div className="relative bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_2px_16px_-4px_rgba(0,0,0,0.08)] overflow-hidden flex flex-col gap-3">
+      {/* colored top bar */}
+      <div className={`absolute top-0 left-0 right-0 h-1 ${a.bar} rounded-t-2xl`}/>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${a.icon} shrink-0`}>
         {icon}
       </div>
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
-        <p className="text-2xl font-extrabold text-slate-800 tracking-tight">{value}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+        <p className={`text-xl font-extrabold tracking-tight leading-tight break-all ${a.val}`}>{value}</p>
       </div>
     </div>
   );
@@ -284,11 +287,11 @@ export default function UploadPage() {
 
                 {/* Stats cards */}
                 {result.summary && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <SummaryCard icon={<Users size={20}/>}       label="Employees"   value={fmt(result.summary.total_employees)} color="indigo"/>
-                    <SummaryCard icon={<IndianRupee size={20}/>} label="Gross Wages" value={"₹"+fmt(result.summary.total_gross)} color="emerald"/>
-                    <SummaryCard icon={<BarChart3 size={20}/>}   label="EE Share"    value={"₹"+fmt(result.summary.total_ee_share)} color="violet"/>
-                    <SummaryCard icon={<FileX size={20}/>}       label="Rejected"    value={result.summary.rejected_rows}       color="amber"/>
+                  <div className="grid grid-cols-2 gap-4">
+                    <SummaryCard icon={<Users size={18}/>}       label="Employees"   value={fmt(result.summary.total_employees)} color="indigo"/>
+                    <SummaryCard icon={<IndianRupee size={18}/>} label="Gross Wages" value={"₹"+fmt(result.summary.total_gross)} color="emerald"/>
+                    <SummaryCard icon={<BarChart3 size={18}/>}   label="EE Share"    value={"₹"+fmt(result.summary.total_ee_share)} color="violet"/>
+                    <SummaryCard icon={<FileX size={18}/>}       label="Rejected"    value={result.summary.rejected_rows}       color="amber"/>
                   </div>
                 )}
 
