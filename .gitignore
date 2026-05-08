@@ -3,3 +3,20 @@
 **/build/
 **/.env
 **/.DS_Store
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+**/env/
+**/venv/
+**/.venv/
+
+# Backend generated output (don't commit processed files)
+backend/output/
+backend/uploads/
+
+# Test scripts
+backend/test_ecr.py
