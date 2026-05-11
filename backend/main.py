@@ -363,7 +363,7 @@ def process_excel_file(file_path: str, original_filename: str) -> ProcessingResu
         all_rejected: List[Dict] = []
 
         base_name = os.path.splitext(original_filename)[0]
-        month_label = extract_month_label(base_name)
+        month_label = base_name
 
         logger.info(f"Sheets found: {xls.sheet_names} | Month: {month_label}")
 
@@ -461,13 +461,13 @@ def process_excel_file(file_path: str, original_filename: str) -> ProcessingResu
         ecr_df = ecr_df.reset_index(drop=True)
 
         # ── CSV ───────────────────────────────────────────────────────────────
-        csv_name = f"ECR_UPLOAD_{month_label}.csv"
+        csv_name = f"{base_name}.csv"
         csv_path = os.path.join(OUTPUT_DIR, csv_name)
         ecr_df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         files_generated.append(csv_name)
 
         # ── TXT (#~# separated, no header) ───────────────────────────────────
-        txt_name = f"ECR_UPLOAD_{month_label}.txt"
+        txt_name = f"{base_name}.txt"
         txt_path = os.path.join(OUTPUT_DIR, txt_name)
         with open(txt_path, "w", encoding="utf-8") as tf:
             for _, row in ecr_df.iterrows():
@@ -476,7 +476,7 @@ def process_excel_file(file_path: str, original_filename: str) -> ProcessingResu
         files_generated.append(txt_name)
 
         # ── Audit Excel ───────────────────────────────────────────────────────
-        audit_name = f"ECR_AUDIT_{month_label}.xlsx"
+        audit_name = f"{base_name}_Audit.xlsx"
         audit_path = os.path.join(OUTPUT_DIR, audit_name)
         write_audit_excel(ecr_df, all_rejected, month_label, audit_path)
         files_generated.append(audit_name)
