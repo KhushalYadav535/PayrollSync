@@ -408,6 +408,11 @@ export default function UploadPage() {
           </motion.div>
         </div>
       </div>
+
+      {/* Disclaimer */}
+      <div className="mt-12 text-center text-xs text-slate-500 bg-white/50 backdrop-blur-sm p-4 rounded-xl border border-slate-200/60 shadow-sm max-w-4xl mx-auto">
+        <strong>Disclaimer:</strong> The generated ECR file is prepared based on standard EPFO guidelines and user-provided data. Final verification of calculations and text file contents should be performed by the user before uploading to the EPFO portal.
+      </div>
     </div>
   );
 }

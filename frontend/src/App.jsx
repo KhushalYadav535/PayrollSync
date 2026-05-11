@@ -21,7 +21,7 @@ export default function App() {
               <Sparkles size={24} className="animate-pulse" />
             </div>
             <h1 className="text-3xl font-extrabold font-display bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 tracking-tight text-glow">
-              AutoECR
+              ECRSathi
             </h1>
           </div>
           
